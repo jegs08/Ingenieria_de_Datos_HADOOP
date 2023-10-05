@@ -1,0 +1,238 @@
+CREATE DATABASE migracion_sakila;
+
+--TABLA_CUSTOMER
+
+CREATE TABLE migracion_sakila.customer (
+	customer_id int,
+  	store_id int,
+  	first_name varchar(45),
+  	last_name varchar(45),
+  	email varchar(50),
+  	address_id int,
+  	active int,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/customer';
+
+--TABLA_ADDRESS
+
+CREATE TABLE migracion_sakila.address(
+	address_id int,
+  	address varchar(50),
+  	district varchar(20),
+  	city_id int,
+  	postal_code varchar(10),
+  	phone varchar(20),
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/address';
+
+--TABLA_CITY
+
+CREATE TABLE migracion_sakila.city(
+	city_id int,
+	city varchar(50),
+	country_id int,
+	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/city';
+
+--TABLA_COUNTRY
+
+CREATE TABLE migracion_sakila.country(
+	country_id int,
+	country varchar(50),
+	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/country';
+
+--TABLA_FILM
+
+CREATE TABLE migracion_sakila.film(
+	film_id int,
+	title varchar(128),
+	description varchar(500),
+	release_year int,
+	language_id int,
+	original_language int,
+	rental_duration int,
+	rental_rate decimal(4,2),
+	length int,
+	replacement_cost decimal(5,2),
+	rating varchar(10),
+	special_features varchar(200),
+	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/film';
+
+--TABLA_FILM_CATEGORY
+
+CREATE TABLE migracion_sakila.film_category (
+	film_id int,
+  	category_id int,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/film_category';
+
+--TABLA_CATEGORY
+
+CREATE TABLE migracion_sakila.category (
+	category_id int,
+	name varchar(25),
+	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/category';
+
+--TABLA_STORE
+
+CREATE TABLE migracion_sakila.store (
+	store_id int,
+  	manager_staff_id int,
+  	address_id int,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/store';
+
+--TABLA_PAYMENT
+
+CREATE TABLE migracion_sakila.payment (
+	payment_id int,
+  	customer_id int,
+  	staff_id int,
+  	rental_id int,
+  	amount decimal(5,2),
+  	payment_date date,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/payment_hive';
+
+--TABLA_STAFF
+
+CREATE TABLE migracion_sakila.staff (
+	payment_id int,
+  	customer_id int,
+  	staff_id int,
+  	rental_id int,
+  	amount decimal(5,2),
+  	payment_date date,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/staff';
+
+--TABLA_RENTAL
+
+CREATE TABLE migracion_sakila.rental (
+	rental_id int,
+  	rental_date date,
+  	inventory_id int,
+  	customer_id int,
+  	return_date date,
+  	staff_id int,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/rental_hive';
+
+--TABLE_INVENTORY
+
+CREATE TABLE migracion_sakila.inventory (
+	inventory_id int,
+  	film_id int,
+  	store_id int,
+  	last_update timestamp
+)
+LOCATION '/user/maria_dev/data/inventory';
+
+CREATE DATABASE dw_sakila;
+
+--TABLA_DIM_CUSTOMER
+
+CREATE TABLE DW_SAKILA.dim_customer (
+	customer_key int,
+  	nombre_completo varchar(117),
+  	address_customer varchar(65),
+  	city_customer varchar(65),
+  	country_customer varchar(65)
+)
+LOCATION '/user/maria_dev/data_dw_sakila/dim_customer';
+
+--TABLA_DIM_FILM
+
+CREATE TABLE DW_SAKILA.dim_film (
+	film_key int,
+  	name_film varchar(166),
+  	name_category varchar(33)
+)
+LOCATION '/user/maria_dev/data_dw_sakila/dim_film';
+
+--TABLE_DIM_STORE
+
+CREATE TABLE DW_SAKILA.dim_store (
+	store_key int,
+  	address_store varchar(65),
+  	city_store varchar(65),
+	country_store varchar(65)
+)
+LOCATION '/user/maria_dev/data_dw_sakila/dim_store';
+
+--TABLE_DATE_SALES
+
+CREATE TABLE dw_sakila.date_sales (
+	date_key int,
+  	fecha date,
+  	anio int,
+  	trimestre int,
+  	mes int,
+  	mes_nombre varchar(11),
+  	dia int
+)
+LOCATION '/user/maria_dev/data_dw_sakila/date_sales';
+
+INSERT
+
+--DATE_SALES
+SELECT
+ row_number() over () AS date_key,
+ date(b.payment_date) AS fecha,
+ year(b.payment_date) AS anio,
+ CASE 
+    WHEN Month(b.payment_date) < 4 THEN 1 
+    WHEN Month(b.payment_date) < 7 THEN 2 
+    WHEN Month(b.payment_date) < 10 THEN 3 
+	ELSE 4
+  END AS trimestre,
+ Month(b.payment_date) AS mes,
+ DATE_FORMAT(b.payment_date,'MMMMM') AS mes_nombre,
+ Day(b.payment_date) AS dia
+FROM (SELECT DISTINCT payment_date FROM migracion_sakila.payment) b
+
+--FACT_SALES
+
+CREATE TABLE dw_sakila.fact_sales (
+	sale_key int,
+  	fk_date int,
+  	fk_customer int,
+  	fk_film int,
+  	fk_store int,
+  	sales_amount float
+)
+LOCATION '/user/maria_dev/data_dw_sakila/fact_sales';
+
+INSERT
+SELECT 
+	b.payment_id AS sale_key,
+	ds.date_key AS fk_date,
+	cu.customer_key AS fk_customer,
+	f.film_key AS fk_film,
+	st.store_key AS fk_store,
+	b.amount as sales_amount
+FROM migracion_sakila.payment b
+LEFT JOIN dw_sakila.dim_customer cu ON cu.customer_key = b.customer_id
+LEFT JOIN dw_sakila.date_sales ds ON ds.fecha = b.payment_date
+LEFT JOIN migracion_sakila.rental re ON re.rental_id = b.rental_id
+LEFT JOIN migracion_sakila.inventory i ON i.inventory_id = re.inventory_id
+LEFT JOIN dw_sakila.dim_film f ON f.film_key = i.film_id
+LEFT JOIN migracion_sakila.staff s ON s.staff_id = b.staff_id
+LEFT JOIN dw_sakila.dim_store st ON st.store_key = s.store_id
+
+staff -> store
+payment -> rental -> inventory -> film
